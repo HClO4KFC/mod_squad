@@ -1,0 +1,16 @@
+name: mod_squad
+channels:
+  - conda-forge
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/msys2
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/peterjc123
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/menpo
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/bioconda
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free
+  - defaults
+dependencies:
+  - python==3.8
+  - timm==0.3.2
+  - pytorch==1.10.2
