@@ -10,7 +10,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 
-import timm
+# import timm
 from tqdm import *
 
 # assert timm.__version__ == "0.3.2" # version check
