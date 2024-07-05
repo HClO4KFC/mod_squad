@@ -11,7 +11,7 @@ from timm.models.layers import DropPath, to_2tuple
 
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
-from parallel_experts import MoE
+from parallel_linear.parallel_experts import MoE
 
 from moe import MoE as MMoE
 from moe import cvMoE
