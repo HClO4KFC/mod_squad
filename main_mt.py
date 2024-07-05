@@ -229,7 +229,7 @@ def main(args):
             dataset_val = TaskonomyDataset(args.img_types, partition='test', resize_scale=256, crop_size=224)
     elif args.dataset_name == 'pascalVOC2012':
         # try run with pascalVOC2012
-        dataset_train = PascalDataset(args.)
+        dataset_train = PascalDataset(args.img_types, partition='train', resize_scale=256, crop_size=224, fliplr=True)
 
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()

@@ -130,7 +130,7 @@ def rescale_image_gaussian_blur(img, new_scale=[-1., 1.], interp_order=1, blur_s
 class PascalVOCDataset(data.Dataset):
 
     def __init__(self, img_types, data_dir='./data',
-                 split='medium', partition='train', transform=None, resize_scale=None, crop_size=None, fliplr=False):
+                 partition='train', transform=None, resize_scale=None, crop_size=None, fliplr=False): # split='medium',
 
         super(PascalVOCDataset, self).__init__()
 
@@ -140,50 +140,6 @@ class PascalVOCDataset(data.Dataset):
         self.fliplr = fliplr
         self.class_num = {'class_object': 1000, 'class_scene': 365, 'segment_semantic': 18}
 
-        def loadSplit(splitFile, full=False):
-            dictLabels = {}
-            with open(splitFile) as csvfile:
-                csvreader = csv.reader(csvfile, delimiter=',')
-                next(csvreader, None)
-                for i, row in enumerate(csvreader):
-                    scene = row[0]
-                    if scene == 'woodbine':  # missing from the dataset
-                        continue
-                    if scene == 'wiconisco':  # missing 80 images for edge_texture
-                        continue
-                    no_list = {'brinnon', 'cauthron', 'cochranton', 'donaldson', 'german',
-                               'castor', 'tokeland', 'andover', 'rogue', 'athens', 'broseley', 'tilghmanton',
-                               'winooski', 'rosser', 'arkansaw', 'bonnie', 'willow', 'timberon', 'bohemia', 'micanopy',
-                               'thrall', 'annona', 'byers', 'anaheim', 'duarte', 'wyldwood'
-                               }
-                    new_list = {'ballou', 'tansboro', 'cutlerville', 'macarthur', 'rough', 'darnestown', 'maryhill',
-                                'bowlus', 'tomkins', 'herricks', 'mosquito', 'brinnon', 'gough'}
-
-                    if scene in new_list and full:
-                        continue
-                    if scene in no_list and (not full):
-                        continue
-                    is_train, is_val, is_test = row[1], row[2], row[3]
-                    if is_train == '1' or is_val == '1':
-                        label = 'train'
-                    else:
-                        label = 'test'
-
-                    if label in dictLabels.keys():
-                        dictLabels[label].append(scene)
-                    else:
-                        dictLabels[label] = [scene]
-            return dictLabels
-
-        self.split = split
-
-        if split == 'medium':
-            self.data = loadSplit(splitFile=os.path.join(data_dir, 'splits_taskonomy/train_val_test_medium.csv'))
-        elif split == 'fullplus':
-            self.data = loadSplit(splitFile=os.path.join(data_dir, 'splits_taskonomy/train_val_test_fullplus.csv'),
-                                  full=True)
-        else:
-            assert False
         print('data_dir: ', data_dir)
 
         self.scene_list = self.data[partition]
@@ -194,8 +150,6 @@ class PascalVOCDataset(data.Dataset):
             self.data_list[img_type] = []
 
         for scene in self.scene_list:
-            length = {}
-            _max = 0
             for img_type in img_types:
                 image_dir = os.path.join(data_dir, img_type, 'taskonomy', scene)
                 try:
@@ -302,35 +256,35 @@ class PascalVOCDataset(data.Dataset):
         return self.length
 
 
-class FewshotTaskonomy(TaskonomyDataset):
-
-    def __init__(self, shots, *args, **kwargs):
-        super(FewshotTaskonomy, self).__init__(*args, **kwargs)
-
-        np.random.seed(20250901)
-        self.choose = np.random.randint(self.length, size=shots)
-
-        print(self.choose)
-
-        self.length = shots
-
-    def __getitem__(self, index):
-        return super(FewshotTaskonomy, self).__getitem__(self.choose[index])
-
-
-class PercentageTaskonomy(TaskonomyDataset):
-
-    def __init__(self, perc, *args, **kwargs):
-        super(PercentageTaskonomy, self).__init__(*args, **kwargs)
-
-        np.random.seed(20250901)
-        self.perc = perc
-        self.choose = np.random.randint(self.length, size=int(self.length * self.perc))
-
-        self.length = int(self.length * self.perc)
-
-    def __getitem__(self, index):
-        return super(PercentageTaskonomy, self).__getitem__(self.choose[index])
+# class FewshotTaskonomy(TaskonomyDataset):
+#
+#     def __init__(self, shots, *args, **kwargs):
+#         super(FewshotTaskonomy, self).__init__(*args, **kwargs)
+#
+#         np.random.seed(20250901)
+#         self.choose = np.random.randint(self.length, size=shots)
+#
+#         print(self.choose)
+#
+#         self.length = shots
+#
+#     def __getitem__(self, index):
+#         return super(FewshotTaskonomy, self).__getitem__(self.choose[index])
+#
+#
+# class PercentageTaskonomy(TaskonomyDataset):
+#
+#     def __init__(self, perc, *args, **kwargs):
+#         super(PercentageTaskonomy, self).__init__(*args, **kwargs)
+#
+#         np.random.seed(20250901)
+#         self.perc = perc
+#         self.choose = np.random.randint(self.length, size=int(self.length * self.perc))
+#
+#         self.length = int(self.length * self.perc)
+#
+#     def __getitem__(self, index):
+#         return super(PercentageTaskonomy, self).__getitem__(self.choose[index])
 
 
 import random
@@ -340,12 +294,12 @@ if __name__ == '__main__':
                  'edge_occlusion', 'edge_texture', 'keypoints2d', 'keypoints3d', 'reshading', 'rgb', 'segment_unsup2d',
                  'segment_unsup25d']
 
-    train_set = TaskonomyDataset(img_types, split='fullplus', partition='train', resize_scale=256, crop_size=224,
+    train_set = PascalVOCDataset(img_types, partition='train', resize_scale=256, crop_size=224,
                                  fliplr=True)
     print(len(train_set))
     A = train_set.__getitem__(len(train_set) - 1)
     A = train_set.__getitem__(0)
 
     train_loader = DataLoader(train_set, batch_size=28 * 6, num_workers=48, shuffle=False, pin_memory=False)
-    for itr, data in tqdm(enumerate(train_loader)):
-        pass
+    # for itr, data in tqdm(enumerate(train_loader)):
+    #     pass
