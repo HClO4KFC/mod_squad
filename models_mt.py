@@ -98,7 +98,7 @@ class MTVisionTransformer(timm.models.vision_transformer.VisionTransformer):
             return x
         return x, z_loss
 
-from models_vit import VisionTransformer
+# from models_vit import VisionTransformer
 
 def move_dict(ckpt, src, tgt):
     if src in ckpt and (src!=tgt):
