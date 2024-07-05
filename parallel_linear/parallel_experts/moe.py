@@ -17,7 +17,8 @@ import torch.nn.functional as F
 import numpy as np
 import random
 
-from .parallel_experts import ParallelExperts
+# from .parallel_experts import ParallelExperts
+from parallel_linear.parallel_experts import ParallelExperts
 
 @torch.jit.script
 def compute_gating(k: int, probs: torch.Tensor, top_k_gates: torch.Tensor, top_k_indices: torch.Tensor):
