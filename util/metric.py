@@ -1,7 +1,7 @@
 import torch
 import math
-import skimage
-import skimage.io
+# import skimage
+# import skimage.io
 import scipy
 import numpy as np
 import os
