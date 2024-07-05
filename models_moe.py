@@ -17,7 +17,7 @@ from moe import MoE as MMoE
 
 # from moe import cvMoE
 # from mixture_of_experts import MoE as newMoE
-from oldmoe import MoE as oldMoE
+# from oldmoe import MoE as oldMoE
 
 from parallel_experts import RandomMoE, TaskMoE
 
