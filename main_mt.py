@@ -209,8 +209,6 @@ def main(args):
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
-    print('given args:')
-    print(args)
     device = torch.device(args.device)
 
     # fix the seed for reproducibility
