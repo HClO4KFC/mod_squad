@@ -11,14 +11,16 @@ from torch.utils.data import DataLoader
 import PIL
 
 
-all_tasks = ['class_object', 'class_scene', 'depth_euclidean', 'depth_zbuffer', 'keypoints2d', 'edge_occlusion', 'edge_texture', 'keypoints3d', 'normal', 'principal_curvature', 'reshading', 'rgb', 'segment_unsup2d', 'segment_unsup25d']
+# all_tasks = ['class_object', 'class_scene', 'depth_euclidean', 'depth_zbuffer', 'keypoints2d', 'edge_occlusion',
+#              'edge_texture', 'keypoints3d', 'normal', 'principal_curvature', 'reshading', 'rgb', 'segment_unsup2d',
+#              'segment_unsup25d']
+all_tasks = ['object_detection', 'segment_segmentation']
 new_scale, current_scale, no_clip, preprocess, no_clip = {}, {}, {}, {}, {}
 
 for task in all_tasks:
-    new_scale[task], current_scale[task], no_clip[task] = [-1.,1.], None, None
+    new_scale[task], current_scale[task], no_clip[task] = [-1., 1.], None, None
     preprocess[task] = False
     no_clip[task] = False
-
 
 current_scale['rgb'] = [0.0, 255.0]
 # class_object', ' xentropy
@@ -28,11 +30,11 @@ current_scale['rgb'] = [0.0, 255.0]
 # depth_euclidean l1_loss
 
 # keypoints2d l1
-current_scale['keypoints2d'] = [0.0, 0.005 * (2**16)]
+current_scale['keypoints2d'] = [0.0, 0.005 * (2 ** 16)]
 
 # keypoints3d
 
-current_scale['keypoints3d'] = [0.0, 1.0 * (2**16)] # 64000
+current_scale['keypoints3d'] = [0.0, 1.0 * (2 ** 16)]  # 64000
 
 # normal l1_loss
 
@@ -44,11 +46,11 @@ current_scale['reshading'] = [0.0, 255.0]
 # segment_unsup2d metric_loss
 
 # edge_texture l1
-current_scale['edge_texture'] = [0.0, 0.08 * (2**16)]
+current_scale['edge_texture'] = [0.0, 0.08 * (2 ** 16)]
 
 # edge_occlusion l1
 
-current_scale['edge_occlusion'] = [0.0, 0.00625* (2**16)]
+current_scale['edge_occlusion'] = [0.0, 0.00625 * (2 ** 16)]
 
 no_clip['edge_occlusion'] = True
 
@@ -60,19 +62,21 @@ current_scale['segment_unsup25d'] = [0.0, 255.0]
 
 preprocess['principal_curvature'] = True
 
+
 def curvature_preprocess(img, new_dims, interp_order=1):
-    img = img[:,:,:2]
+    img = img[:, :, :2]
     img = img - [123.572, 120.1]
     img = img / [31.922, 21.658]
     return img
 
-def rescale_image(im, new_scale=[-1.,1.], current_scale=None, no_clip=False):
+
+def rescale_image(im, new_scale=[-1., 1.], current_scale=None, no_clip=False):
     """
     Rescales an image pixel values to target_scale
-    
+
     Args:
         img: A np.float_32 array, assumed between [0,1]
-        new_scale: [min,max] 
+        new_scale: [min,max]
         current_scale: If not supplied, it is assumed to be in:
             [0, 1]: if dtype=float
             [0, 2^16]: if dtype=uint
@@ -94,11 +98,15 @@ def rescale_image(im, new_scale=[-1.,1.], current_scale=None, no_clip=False):
 
     return im
 
+
 from scipy.ndimage.filters import gaussian_filter
-def rescale_image_gaussian_blur(img, new_scale=[-1.,1.], interp_order=1, blur_strength=4, current_scale=None, no_clip=False):
+
+
+def rescale_image_gaussian_blur(img, new_scale=[-1., 1.], interp_order=1, blur_strength=4, current_scale=None,
+                                no_clip=False):
     """
-    Resize an image array with interpolation, and rescale to be 
-      between 
+    Resize an image array with interpolation, and rescale to be
+      between
     Parameters
     ----------
     im : (H x W x K) ndarray
@@ -111,66 +119,27 @@ def rescale_image_gaussian_blur(img, new_scale=[-1.,1.], interp_order=1, blur_st
     """
     # img = skimage.img_as_float( img ).astype(np.float32)
     # img = resize_image( img, new_dims, interp_order )
-    img = rescale_image( img, new_scale, current_scale=current_scale, no_clip=True )
+    img = rescale_image(img, new_scale, current_scale=current_scale, no_clip=True)
     blurred = gaussian_filter(img, sigma=blur_strength)
     if not no_clip:
         min_val, max_val = new_scale
         np.clip(blurred, min_val, max_val, out=blurred)
     return blurred
 
-class TaskonomyDataset(data.Dataset):
-    
-    def __init__(self, img_types, data_dir='./data', 
-        split='medium', partition='train', transform=None, resize_scale=None, crop_size=None, fliplr=False):
-        
-        super(TaskonomyDataset, self).__init__()
-        
+
+class PascalVOCDataset(data.Dataset):
+
+    def __init__(self, img_types, data_dir='./data',
+                 partition='train', transform=None, resize_scale=None, crop_size=None, fliplr=False): # split='medium',
+
+        super(PascalVOCDataset, self).__init__()
+
         self.partition = partition
         self.resize_scale = resize_scale
         self.crop_size = crop_size
         self.fliplr = fliplr
-        self.class_num = {'class_object': 1000, 'class_scene': 365, 'segment_semantic':18}
+        self.class_num = {'class_object': 1000, 'class_scene': 365, 'segment_semantic': 18}
 
-        def loadSplit(splitFile, full=False):
-            dictLabels = {}
-            with open(splitFile) as csvfile:
-                csvreader = csv.reader(csvfile, delimiter=',')
-                next(csvreader, None)
-                for i,row in enumerate(csvreader):
-                    scene = row[0]
-                    if scene == 'woodbine': # missing from the dataset
-                        continue
-                    if scene == 'wiconisco': # missing 80 images for edge_texture
-                        continue
-                    no_list = {'brinnon', 'cauthron', 'cochranton', 'donaldson', 'german',
-                        'castor', 'tokeland', 'andover', 'rogue', 'athens', 'broseley', 'tilghmanton', 'winooski', 'rosser', 'arkansaw', 'bonnie', 'willow', 'timberon', 'bohemia', 'micanopy', 'thrall', 'annona', 'byers', 'anaheim', 'duarte', 'wyldwood'
-                    }
-                    new_list = {'ballou', 'tansboro', 'cutlerville', 'macarthur', 'rough', 'darnestown', 'maryhill', 'bowlus', 'tomkins', 'herricks', 'mosquito', 'brinnon', 'gough'}
-                    
-                    if scene in new_list and full:
-                        continue
-                    if scene in no_list and (not full):
-                        continue
-                    is_train, is_val, is_test = row[1], row[2], row[3]
-                    if is_train=='1' or is_val=='1':
-                        label = 'train'
-                    else:
-                        label = 'test'
-
-                    if label in dictLabels.keys():
-                        dictLabels[label].append(scene)
-                    else:
-                        dictLabels[label] = [scene]
-            return dictLabels
-
-        self.split = split
-
-        if split == 'medium':
-            self.data = loadSplit(splitFile = os.path.join(data_dir, 'splits_taskonomy/train_val_test_medium.csv'))
-        elif split == 'fullplus':
-            self.data = loadSplit(splitFile = os.path.join(data_dir, 'splits_taskonomy/train_val_test_fullplus.csv'), full=True)
-        else:
-            assert False
         print('data_dir: ', data_dir)
 
         self.scene_list = self.data[partition]
@@ -181,8 +150,6 @@ class TaskonomyDataset(data.Dataset):
             self.data_list[img_type] = []
 
         for scene in self.scene_list:
-            length = {}
-            _max = 0
             for img_type in img_types:
                 image_dir = os.path.join(data_dir, img_type, 'taskonomy', scene)
                 try:
@@ -199,8 +166,8 @@ class TaskonomyDataset(data.Dataset):
                         continue
 
             for _key, value in length.items():
-                if value < _max: # check which scene miss data
-                    print(_key+'/taskonomy/'+scene)
+                if value < _max:  # check which scene miss data
+                    print(_key + '/taskonomy/' + scene)
 
         # assert False
         self.length = len(self.data_list[self.img_types[0]])
@@ -221,26 +188,26 @@ class TaskonomyDataset(data.Dataset):
                 output[img_type] = torch.from_numpy(target).float()
             else:
                 try:
-                    img = Image.open(self.data_list[img_type][index])  
+                    img = Image.open(self.data_list[img_type][index])
                 except:
                     print(self.data_list[img_type][index])
-                    img = Image.open(self.data_list[img_type][index-1])
+                    img = Image.open(self.data_list[img_type][index - 1])
                 np_img = np.array(img)
                 if isinstance(np_img.max(), PIL.PngImagePlugin.PngImageFile):
                     print('corrupt: ', self.data_list[img_type][index])
-                    return self.__getitem__(index-1)
+                    return self.__getitem__(index - 1)
 
                 imgs.append(img)
 
         # Transfor operation on image
         if self.resize_scale:
             imgs = [img.resize((self.resize_scale, self.resize_scale), Image.BILINEAR) \
-                for img in imgs]
+                    for img in imgs]
 
         if self.crop_size:
             if self.partition == 'test':
-                x = (self.resize_scale - self.crop_size + 1)//2
-                y = (self.resize_scale - self.crop_size + 1)//2
+                x = (self.resize_scale - self.crop_size + 1) // 2
+                y = (self.resize_scale - self.crop_size + 1) // 2
                 imgs = [img.crop((x, y, x + self.crop_size, y + self.crop_size)) for img in imgs]
             else:
                 x = random.randint(0, self.resize_scale - self.crop_size + 1)
@@ -264,69 +231,75 @@ class TaskonomyDataset(data.Dataset):
                 output[img_type] = imgs[pos]
                 if 'depth' in img_type:
                     output[img_type] = np.array(output[img_type])
-                    output[img_type] = np.log(1+output[img_type]) / ( np.log( 2. ** 16.0 ) )
+                    output[img_type] = np.log(1 + output[img_type]) / (np.log(2. ** 16.0))
                 elif 'curvature' in img_type:
                     output[img_type] = np.array(output[img_type])
                     output[img_type] = curvature_preprocess(output[img_type], (256, 256))
                 elif 'edge_occlusion' in img_type:
-                    output[img_type] = rescale_image_gaussian_blur(output[img_type],current_scale=current_scale[img_type], no_clip=no_clip[img_type])
+                    output[img_type] = rescale_image_gaussian_blur(output[img_type],
+                                                                   current_scale=current_scale[img_type],
+                                                                   no_clip=no_clip[img_type])
                 else:
-                    output[img_type] = rescale_image(output[img_type], new_scale[img_type], current_scale=current_scale[img_type], no_clip=no_clip[img_type])
- 
+                    output[img_type] = rescale_image(output[img_type], new_scale[img_type],
+                                                     current_scale=current_scale[img_type], no_clip=no_clip[img_type])
+
                 output[img_type] = torch.from_numpy(output[img_type]).float()
-                if output[img_type].dim() == 3 and output[img_type].shape[2]>1:
-                    output[img_type] = output[img_type].permute(2,0,1)
+                if output[img_type].dim() == 3 and output[img_type].shape[2] > 1:
+                    output[img_type] = output[img_type].permute(2, 0, 1)
                 pos = pos + 1
 
         return output
 
     def __len__(self):
         if self.partition == 'test':
-            return self.length//10
+            return self.length // 10
         return self.length
 
 
-class FewshotTaskonomy(TaskonomyDataset):
-
-    def __init__(self, shots, *args, **kwargs):
-        super(FewshotTaskonomy, self).__init__(*args, **kwargs)
-
-        np.random.seed(20250901)
-        self.choose = np.random.randint(self.length, size=shots)
-
-        print(self.choose)
-
-        self.length = shots
-
-    def __getitem__(self, index):
-        return super(FewshotTaskonomy, self).__getitem__(self.choose[index])
-
-
-class PercentageTaskonomy(TaskonomyDataset):
-
-    def __init__(self, perc, *args, **kwargs):
-        super(PercentageTaskonomy, self).__init__(*args, **kwargs)
-
-        np.random.seed(20250901)
-        self.perc = perc
-        self.choose = np.random.randint(self.length, size=int(self.length * self.perc))
-
-        self.length = int(self.length * self.perc)
-
-    def __getitem__(self, index):
-        return super(PercentageTaskonomy, self).__getitem__(self.choose[index])
-
+# class FewshotTaskonomy(TaskonomyDataset):
+#
+#     def __init__(self, shots, *args, **kwargs):
+#         super(FewshotTaskonomy, self).__init__(*args, **kwargs)
+#
+#         np.random.seed(20250901)
+#         self.choose = np.random.randint(self.length, size=shots)
+#
+#         print(self.choose)
+#
+#         self.length = shots
+#
+#     def __getitem__(self, index):
+#         return super(FewshotTaskonomy, self).__getitem__(self.choose[index])
+#
+#
+# class PercentageTaskonomy(TaskonomyDataset):
+#
+#     def __init__(self, perc, *args, **kwargs):
+#         super(PercentageTaskonomy, self).__init__(*args, **kwargs)
+#
+#         np.random.seed(20250901)
+#         self.perc = perc
+#         self.choose = np.random.randint(self.length, size=int(self.length * self.perc))
+#
+#         self.length = int(self.length * self.perc)
+#
+#     def __getitem__(self, index):
+#         return super(PercentageTaskonomy, self).__getitem__(self.choose[index])
 
 
 import random
+
 if __name__ == '__main__':
-    img_types = ['class_object', 'class_scene', 'depth_euclidean', 'depth_zbuffer', 'normal', 'principal_curvature', 'edge_occlusion', 'edge_texture', 'keypoints2d', 'keypoints3d', 'reshading', 'rgb', 'segment_unsup2d', 'segment_unsup25d']
-    
-    train_set = TaskonomyDataset(img_types, split='fullplus', partition='train', resize_scale=256, crop_size=224, fliplr=True)
+    img_types = ['class_object', 'class_scene', 'depth_euclidean', 'depth_zbuffer', 'normal', 'principal_curvature',
+                 'edge_occlusion', 'edge_texture', 'keypoints2d', 'keypoints3d', 'reshading', 'rgb', 'segment_unsup2d',
+                 'segment_unsup25d']
+
+    train_set = PascalVOCDataset(img_types, partition='train', resize_scale=256, crop_size=224,
+                                 fliplr=True)
     print(len(train_set))
-    A = train_set.__getitem__(len(train_set)-1)
+    A = train_set.__getitem__(len(train_set) - 1)
     A = train_set.__getitem__(0)
 
-    train_loader = DataLoader(train_set, batch_size=28*6, num_workers=48, shuffle=False, pin_memory=False)
-    for itr, data in tqdm(enumerate(train_loader)):
-        pass
+    train_loader = DataLoader(train_set, batch_size=28 * 6, num_workers=48, shuffle=False, pin_memory=False)
+    # for itr, data in tqdm(enumerate(train_loader)):
+    #     pass

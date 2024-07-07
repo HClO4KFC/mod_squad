@@ -10,7 +10,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 
-import timm
+# import timm
 from tqdm import *
 
 # assert timm.__version__ == "0.3.2" # version check
@@ -51,6 +51,8 @@ def get_args_parser():
     parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
+    parser.add_argument('--dataset_name', default='taskonomy_fullplus', type=str,
+                        help='The name of the multi-task dataset to be used, chosen from taskonomy_fullplus, taskonomy_midium, pascalVOC2012')
 
     # Model parameters
     parser.add_argument('--model', default='vit_base_patch16', type=str, metavar='MODEL',
@@ -207,7 +209,6 @@ def main(args):
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
-
     device = torch.device(args.device)
 
     # fix the seed for reproducibility
@@ -217,13 +218,17 @@ def main(args):
 
     cudnn.benchmark = True
 
-    if args.scaleup: # use the whole taskonomy
-        print('Caution:: You are scaling up!!')
-        dataset_train = TaskonomyDataset(args.img_types, split='fullplus', partition='train', resize_scale=256, crop_size=224, fliplr=True)
-        dataset_val = TaskonomyDataset(args.img_types, split='fullplus', partition='test', resize_scale=256, crop_size=224)
-    else: # use the medium set of taskonomy
-        dataset_train = TaskonomyDataset(args.img_types, partition='train', resize_scale=256, crop_size=224, fliplr=True)
-        dataset_val = TaskonomyDataset(args.img_types, partition='test', resize_scale=256, crop_size=224)
+    if args.dataset_name == 'taskonomy_fullplus' or args.dataset_name == 'taskonomy_midium':
+        if args.scaleup: # use the whole taskonomy
+            print('Caution:: You are scaling up!!')
+            dataset_train = TaskonomyDataset(args.img_types, split='fullplus', partition='train', resize_scale=256, crop_size=224, fliplr=True)
+            dataset_val = TaskonomyDataset(args.img_types, split='fullplus', partition='test', resize_scale=256, crop_size=224)
+        else: # use the medium set of taskonomy
+            dataset_train = TaskonomyDataset(args.img_types, partition='train', resize_scale=256, crop_size=224, fliplr=True)
+            dataset_val = TaskonomyDataset(args.img_types, partition='test', resize_scale=256, crop_size=224)
+    elif args.dataset_name == 'pascalVOC2012':
+        # try run with pascalVOC2012
+        dataset_train = PascalDataset(args.img_types, partition='train', resize_scale=256, crop_size=224, fliplr=True)
 
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()
@@ -396,6 +401,7 @@ def main(args):
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
+    args.local_rank = int(os.environ['LOCAL_RANK'])
 
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

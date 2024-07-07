@@ -11,14 +11,15 @@ from timm.models.layers import DropPath, to_2tuple
 
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
-from parallel_experts import MoE
+from parallel_linear.parallel_experts import MoE
 
-from moe import MoE as MMoE
-from moe import cvMoE
+from parallel_linear.parallel_experts.moe import MoE as MMoE
+
+# from moe import cvMoE
 # from mixture_of_experts import MoE as newMoE
-from oldmoe import MoE as oldMoE
+# from oldmoe import MoE as oldMoE
 
-from parallel_experts import RandomMoE, TaskMoE
+from parallel_linear.parallel_experts import RandomMoE, TaskMoE
 
 class PatchEmbed(nn.Module):
     """ Image to Patch Embedding
