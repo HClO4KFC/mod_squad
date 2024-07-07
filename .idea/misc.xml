@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="mod_sq" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="mod_sq" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="mod_squad" project-jdk-type="Python SDK" />
 </project>

@@ -9,7 +9,7 @@ from torchvision import transforms
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 import PIL
-import
+
 
 # all_tasks = ['class_object', 'class_scene', 'depth_euclidean', 'depth_zbuffer', 'keypoints2d', 'edge_occlusion',
 #              'edge_texture', 'keypoints3d', 'normal', 'principal_curvature', 'reshading', 'rgb', 'segment_unsup2d',
