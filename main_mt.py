@@ -209,7 +209,8 @@ def main(args):
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
-
+    print('given args:')
+    print(args)
     device = torch.device(args.device)
 
     # fix the seed for reproducibility
@@ -402,6 +403,7 @@ def main(args):
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
+    args.local_rank = int(os.environ['LOCAL_RANK'])
 
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
