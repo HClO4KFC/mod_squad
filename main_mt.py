@@ -51,7 +51,7 @@ def get_args_parser():
     parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
-    parser.add_argument('--dataset_name', default='taskonomy_fullplus', type=str,
+    parser.add_argument('--dataset_name', default='taskonomy_tiny', type=str,
                         help='The name of the multi-task dataset to be used, chosen from taskonomy_fullplus, taskonomy_midium, pascalVOC2012')
 
     # Model parameters

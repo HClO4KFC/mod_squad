@@ -1,1 +1,4 @@
 pascalVOC
+.vscode/
+__pycache__/
+omnidata/
