@@ -1,0 +1,351 @@
+MTVisionTransformerMoETaskGating(
+  (patch_embed): PatchEmbed(
+    (proj): Conv2d(3, 768, kernel_size=(16, 16), stride=(16, 16))
+    (norm): Identity()
+  )
+  (pos_drop): Dropout(p=0.0, inplace=False)
+  (patch_drop): Identity()
+  (norm_pre): Identity()
+  (blocks): Sequential(
+    (0): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): MoETaskAttention(
+        (q_proj): TaskMoE(
+          k=12, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+          (experts): ParallelExperts(num_experts=24, input_size=768, output_size=128)
+          (output_experts): ParallelExperts(num_experts=24, input_size=128, output_size=768)
+          (f_gate): ModuleList(
+            (0-4): 5 x Sequential(
+              (0): Linear(in_features=768, out_features=24, bias=False)
+            )
+          )
+        )
+        (kv_proj): Sequential(
+          (0): Linear(in_features=768, out_features=256, bias=True)
+        )
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): Identity()
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=768, out_features=3072, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=3072, out_features=768, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (1): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=768, out_features=4608, bias=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=1536, out_features=768, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.009)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): TaskMoE(
+        k=4, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+        (experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (output_experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (activation): Sequential(
+          (0): GELU(approximate='none')
+        )
+        (f_gate): ModuleList(
+          (0-4): 5 x Sequential(
+            (0): Linear(in_features=768, out_features=16, bias=False)
+          )
+        )
+      )
+    )
+    (2): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): MoETaskAttention(
+        (q_proj): TaskMoE(
+          k=12, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+          (experts): ParallelExperts(num_experts=24, input_size=768, output_size=128)
+          (output_experts): ParallelExperts(num_experts=24, input_size=128, output_size=768)
+          (f_gate): ModuleList(
+            (0-4): 5 x Sequential(
+              (0): Linear(in_features=768, out_features=24, bias=False)
+            )
+          )
+        )
+        (kv_proj): Sequential(
+          (0): Linear(in_features=768, out_features=256, bias=True)
+        )
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.018)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=768, out_features=3072, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=3072, out_features=768, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (3): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=768, out_features=4608, bias=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=1536, out_features=768, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.027)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): TaskMoE(
+        k=4, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+        (experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (output_experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (activation): Sequential(
+          (0): GELU(approximate='none')
+        )
+        (f_gate): ModuleList(
+          (0-4): 5 x Sequential(
+            (0): Linear(in_features=768, out_features=16, bias=False)
+          )
+        )
+      )
+    )
+    (4): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): MoETaskAttention(
+        (q_proj): TaskMoE(
+          k=12, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+          (experts): ParallelExperts(num_experts=24, input_size=768, output_size=128)
+          (output_experts): ParallelExperts(num_experts=24, input_size=128, output_size=768)
+          (f_gate): ModuleList(
+            (0-4): 5 x Sequential(
+              (0): Linear(in_features=768, out_features=24, bias=False)
+            )
+          )
+        )
+        (kv_proj): Sequential(
+          (0): Linear(in_features=768, out_features=256, bias=True)
+        )
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.036)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=768, out_features=3072, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=3072, out_features=768, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (5): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=768, out_features=4608, bias=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=1536, out_features=768, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.045)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): TaskMoE(
+        k=4, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+        (experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (output_experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (activation): Sequential(
+          (0): GELU(approximate='none')
+        )
+        (f_gate): ModuleList(
+          (0-4): 5 x Sequential(
+            (0): Linear(in_features=768, out_features=16, bias=False)
+          )
+        )
+      )
+    )
+    (6): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): MoETaskAttention(
+        (q_proj): TaskMoE(
+          k=12, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+          (experts): ParallelExperts(num_experts=24, input_size=768, output_size=128)
+          (output_experts): ParallelExperts(num_experts=24, input_size=128, output_size=768)
+          (f_gate): ModuleList(
+            (0-4): 5 x Sequential(
+              (0): Linear(in_features=768, out_features=24, bias=False)
+            )
+          )
+        )
+        (kv_proj): Sequential(
+          (0): Linear(in_features=768, out_features=256, bias=True)
+        )
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.055)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=768, out_features=3072, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=3072, out_features=768, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (7): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=768, out_features=4608, bias=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=1536, out_features=768, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.064)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): TaskMoE(
+        k=4, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+        (experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (output_experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (activation): Sequential(
+          (0): GELU(approximate='none')
+        )
+        (f_gate): ModuleList(
+          (0-4): 5 x Sequential(
+            (0): Linear(in_features=768, out_features=16, bias=False)
+          )
+        )
+      )
+    )
+    (8): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): MoETaskAttention(
+        (q_proj): TaskMoE(
+          k=12, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+          (experts): ParallelExperts(num_experts=24, input_size=768, output_size=128)
+          (output_experts): ParallelExperts(num_experts=24, input_size=128, output_size=768)
+          (f_gate): ModuleList(
+            (0-4): 5 x Sequential(
+              (0): Linear(in_features=768, out_features=24, bias=False)
+            )
+          )
+        )
+        (kv_proj): Sequential(
+          (0): Linear(in_features=768, out_features=256, bias=True)
+        )
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.073)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=768, out_features=3072, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=3072, out_features=768, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (9): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=768, out_features=4608, bias=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=1536, out_features=768, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.082)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): TaskMoE(
+        k=4, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+        (experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (output_experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (activation): Sequential(
+          (0): GELU(approximate='none')
+        )
+        (f_gate): ModuleList(
+          (0-4): 5 x Sequential(
+            (0): Linear(in_features=768, out_features=16, bias=False)
+          )
+        )
+      )
+    )
+    (10): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): MoETaskAttention(
+        (q_proj): TaskMoE(
+          k=12, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+          (experts): ParallelExperts(num_experts=24, input_size=768, output_size=128)
+          (output_experts): ParallelExperts(num_experts=24, input_size=128, output_size=768)
+          (f_gate): ModuleList(
+            (0-4): 5 x Sequential(
+              (0): Linear(in_features=768, out_features=24, bias=False)
+            )
+          )
+        )
+        (kv_proj): Sequential(
+          (0): Linear(in_features=768, out_features=256, bias=True)
+        )
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.091)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): Mlp(
+        (fc1): Linear(in_features=768, out_features=3072, bias=True)
+        (act): GELU(approximate='none')
+        (fc2): Linear(in_features=3072, out_features=768, bias=True)
+        (drop): Dropout(p=0.0, inplace=False)
+      )
+    )
+    (11): MoEnhanceTaskBlock(
+      (norm1): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (attn): Attention(
+        (qkv): Linear(in_features=768, out_features=4608, bias=True)
+        (attn_drop): Dropout(p=0.0, inplace=False)
+        (proj): Linear(in_features=1536, out_features=768, bias=True)
+        (proj_drop): Dropout(p=0.0, inplace=False)
+      )
+      (drop_path): DropPath(drop_prob=0.100)
+      (norm2): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+      (mlp): TaskMoE(
+        k=4, cvloss=0, switchloss=0.0, zloss=0.0, noisy_gating=False
+        (experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (output_experts): ParallelExperts(num_experts=16, input_size=768, output_size=768)
+        (activation): Sequential(
+          (0): GELU(approximate='none')
+        )
+        (f_gate): ModuleList(
+          (0-4): 5 x Sequential(
+            (0): Linear(in_features=768, out_features=16, bias=False)
+          )
+        )
+      )
+    )
+  )
+  (norm): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+  (fc_norm): LayerNorm((768,), eps=1e-06, elementwise_affine=True)
+  (head_drop): Dropout(p=0.0, inplace=False)
+  (task_heads): ModuleList(
+    (0): Sequential(
+      (0): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (1): Linear(in_features=768, out_features=1000, bias=True)
+    )
+    (1): Sequential(
+      (0): LayerNorm((768,), eps=1e-05, elementwise_affine=True)
+      (1): Linear(in_features=768, out_features=365, bias=True)
+    )
+    (2): Sequential(
+      (0): Rearrange('b (h w) d -> (b h w) d', h=14, w=14)
+      (1): Linear(in_features=768, out_features=256, bias=True)
+      (2): Rearrange('(b h w) (j k c) -> b (h j) (w k) c', h=14, w=14, j=16, k=16, c=1)
+    )
+    (3): Sequential(
+      (0): Rearrange('b (h w) d -> (b h w) d', h=14, w=14)
+      (1): Linear(in_features=768, out_features=768, bias=True)
+      (2): Rearrange('(b h w) (j k c) -> b (h j) (w k) c', h=14, w=14, j=16, k=16, c=3)
+    )
+    (4): Sequential(
+      (0): Rearrange('b (h w) d -> (b h w) d', h=14, w=14)
+      (1): Linear(in_features=768, out_features=4608, bias=True)
+      (2): Rearrange('(b h w) (j k c) -> b (h j) (w k) c', h=14, w=14, j=16, k=16, c=18)
+    )
+  )
+)

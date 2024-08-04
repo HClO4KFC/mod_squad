@@ -18,6 +18,7 @@ from timm.models.layers import trunc_normal_
 from timm.data.mixup import Mixup
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
 
+import models_mt_mbvit
 import util.lr_decay as lrd
 import util.misc as misc
 from util.datasets import build_taskonomy
@@ -55,6 +56,10 @@ def get_args_parser():
                         help='The name of the multi-task dataset to be used, chosen from taskonomy_fullplus, taskonomy_midium, pascalVOC2012')
 
     # Model parameters
+    parser.add_argument('--mbvit_version', default='mobilevit_xxs', type=str, 
+                        help='the version of mobile vit model, chosen from mobilevit_xxs/xs/s, mobilevitv2_050/...')
+    
+    parser.add_argument('--pretrained', default=False, type=bool, help='whether to pretrain (only valid for mobilevit models)')
     parser.add_argument('--model', default='vit_base_patch16', type=str, metavar='MODEL',
                         help='Name of model to train')
 
@@ -126,6 +131,8 @@ def get_args_parser():
     # Dataset parameters
     parser.add_argument('--nb_classes', default=1000, type=int,
                         help='number of the classification types')
+    
+    parser.add_argument('--data_dir', default='/home/yhy/code/ckf/taskonomy', type=str, help='the path to your dataset root')
 
     parser.add_argument('--output_dir', default='./work_dirs',
                         help='path where to save, empty for no saving')
@@ -161,7 +168,7 @@ def get_args_parser():
 
     parser.add_argument('--times', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--tasks', default=14, type=int,
+    parser.add_argument('--tasks', default=6, type=int,
                         help='number of tasks')
 
     parser.add_argument('--eval_all', action='store_true')
@@ -188,9 +195,13 @@ def get_args_parser():
 def main(args):
 
     if args.tasks == 14:  # no semantic_seg
-        args.img_types = ['class_object', 'class_scene', 'depth_euclidean', 'depth_zbuffer', 'edge_occlusion', 'edge_texture', 'keypoints2d', 'keypoints3d', 'normal', 'principal_curvature', 'reshading', 'rgb', 'segment_unsup2d', 'segment_unsup25d']
+        args.img_types = ['class_object', 'class_scene', 'depth_euclidean', 'depth_zbuffer', 'edge_occlusion', 
+                          'edge_texture', 'keypoints2d', 'keypoints3d', 'normal', 'principal_curvature', 
+                          'reshading', 'rgb', 'segment_unsup2d', 'segment_unsup25d']
+    elif args.tasks == 6:
+        args.img_types = ['rgb', 'class_object', 'class_scene', 'depth_euclidean', 'normal', 'segment_semantic']
     else:
-        assert False
+        assert False, f'which {args.tasks} tasks do you mean?'
 
     # make dir
     args.output_dir = os.path.join(args.output_dir, str(args.exp_name))
@@ -217,18 +228,21 @@ def main(args):
     np.random.seed(seed)
 
     cudnn.benchmark = True
-
-    if args.dataset_name == 'taskonomy_fullplus' or args.dataset_name == 'taskonomy_midium':
-        if args.scaleup: # use the whole taskonomy
-            print('Caution:: You are scaling up!!')
-            dataset_train = TaskonomyDataset(args.img_types, split='fullplus', partition='train', resize_scale=256, crop_size=224, fliplr=True)
-            dataset_val = TaskonomyDataset(args.img_types, split='fullplus', partition='test', resize_scale=256, crop_size=224)
-        else: # use the medium set of taskonomy
-            dataset_train = TaskonomyDataset(args.img_types, partition='train', resize_scale=256, crop_size=224, fliplr=True)
-            dataset_val = TaskonomyDataset(args.img_types, partition='test', resize_scale=256, crop_size=224)
-    elif args.dataset_name == 'pascalVOC2012':
-        # try run with pascalVOC2012
-        dataset_train = PascalDataset(args.img_types, partition='train', resize_scale=256, crop_size=224, fliplr=True)
+    if args.dataset_name == 'taskonomy_tiny':
+        #if args.scaleup: # use the whole taskonomy
+        dataset_train = TaskonomyDataset(args.img_types, split='tiny', partition='train', resize_scale=256, crop_size=224, fliplr=True, data_dir=args.data_dir)
+        dataset_val = TaskonomyDataset(args.img_types, split='tiny', partition='test', resize_scale=256, crop_size=224, data_dir=args.data_dir)
+    elif args.dataset_name == 'taskonomy_mid': # use the medium set of taskonomy
+        print('Using midium size taskonomy dataset!!')
+        dataset_train = TaskonomyDataset(args.img_types, partition='train', resize_scale=256, crop_size=224, fliplr=True, data_dir=args.data_dir)
+        dataset_val = TaskonomyDataset(args.img_types, partition='test', resize_scale=256, crop_size=224, data_dir=args.data_dir)
+    # elif args.dataset_name == 'pascalVOC2012':
+    #     # try run with pascalVOC2012
+    #     dataset_train = PascalDataset(args.img_types, partition='train', resize_scale=256, crop_size=224, fliplr=True)
+    else:
+        assert False, f'the specified dataset {args.dataset_name} is not implemented'
+    
+    print('finished loading datasets, launcing distributed run...')
 
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()
@@ -274,11 +288,14 @@ def main(args):
         drop_last=True
     )
 
-    model = models_mt.__dict__[args.model](
+    # model = models_mt.__dict__[args.model](
+    model = models_mt_mbvit.__dict__[args.model](
         args.img_types,
         num_classes=args.nb_classes,
         drop_path_rate=args.drop_path,
         global_pool=args.global_pool,
+        mbvit_version = args.mbvit_version,
+        pretrained = args.pretrained
     )
 
     if args.finetune and not args.eval:

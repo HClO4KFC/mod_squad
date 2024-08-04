@@ -12,8 +12,8 @@ from timm.models.vision_transformer import VisionTransformer
 from timm.models.mobilevit import mobilevit_xxs
 from timm.models import ByobNet
 from mbvit import MobileViT
-class MTVisionTransformer(VisionTransformer):
-# class MTVisionTransformer(MobileViT):
+# class MTMobileViT(VisionTransformer):
+class MTMobileViT(MobileViT):
     """ Vision Transformer with support for global average pooling
     """
     def __init__(self, img_types, embed_dim=768, global_pool=True, **kwargs):
@@ -21,7 +21,7 @@ class MTVisionTransformer(VisionTransformer):
         if False:
             kwargs.pop('pretrained')
             kwargs.pop('mbvit_version')
-        super(MTVisionTransformer, self).__init__(embed_dim=embed_dim, **kwargs)
+        super(MTMobileViT, self).__init__(embed_dim=embed_dim, **kwargs)
         self.taskGating = False
         self.ismoe = False
         # 多个mobilevit结合 TODO
@@ -36,58 +36,59 @@ class MTVisionTransformer(VisionTransformer):
         # create task head
         self.task_heads = []
         type_to_channel = {'depth_euclidean':1, 'depth_zbuffer':1, 'edge_occlusion':1, 'edge_texture':1, 'keypoints2d':1, 'keypoints3d':1, 'normal':3, 'principal_curvature':2,  'reshading':3, 'rgb':3, 'segment_semantic':18, 'segment_unsup2d':1, 'segment_unsup25d':1}
-        image_height, image_width = self.patch_embed.img_size
-        patch_height, patch_width = self.patch_embed.patch_size
-        assert image_height == 224 and image_width == 224
-        for t in range(len(self.img_types)): ###
-            img_type = self.img_types[t]
+        # image_height, image_width = self.patch_embed.img_size
+        # patch_height, patch_width = self.patch_embed.patch_size
+        # assert image_height == 224 and image_width == 224
+        for img_type in self.img_types:
             if 'class' in img_type:
                 class_num = 1000 if img_type == 'class_object' else 365
                 self.task_heads.append(
-                        # Use the cls token
-                        nn.Sequential(
-                            nn.LayerNorm(embed_dim),
-                            nn.Linear(embed_dim, class_num)
-                        )
+                    nn.Sequential(
+                        nn.LayerNorm(self.embed_dim),
+                        nn.Linear(self.embed_dim, class_num)
                     )
+                )
             else:
-                channel = type_to_channel[img_type]
+                channel = self.type_to_channel[img_type]
                 self.task_heads.append(
-                        # Use the other token
-                        nn.Sequential(
-                            Rearrange('b (h w) d -> (b h w) d', h = image_height//patch_height, w= image_width//patch_width),
-                            nn.Linear(embed_dim, patch_height * patch_width * channel),
-                            Rearrange('(b h w) (j k c) -> b (h j) (w k) c', h = image_height//patch_height, w = image_width//patch_width, j=patch_height, k=patch_width, c=channel),
-                        )
+                    nn.Sequential(
+                        nn.Conv2d(self.embed_dim, channel, kernel_size=1),
+                        nn.Upsample(size=(self.image_height, self.image_width), mode='bilinear', align_corners=False)
                     )
+                )
         self.task_heads = nn.ModuleList(self.task_heads)
+        del self.head # 布置了多任务头, 原先的单任务头可以丢弃
 
-        self.task_embedding = nn.Parameter(torch.randn(1, len(self.img_types), embed_dim))
+        # self.task_embedding = nn.Parameter(torch.randn(1, len(self.img_types), embed_dim))
 
-        self.apply(self._init_weights)
+        if kwargs['init_weights']:
+            self.apply(self._init_weights)
 
     def forward_features(self, x, task_rank, task):
-        B = x.shape[0]
-        x = self.patch_embed(x)
+        # B = x.shape[0]  # the size of this batch
+        # x = self.patch_embed(x)
+        x = self.stem(x)
+        x = self.stages(x)
+        x = self.final_conv(x)
 
-        cls_tokens = self.cls_token.expand(B, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x = x + self.pos_embed
+        # cls_tokens = self.cls_token.expand(B, -1, -1)
+        # x = torch.cat((cls_tokens, x), dim=1)
+        # x = x + self.pos_embed
 
-        x = self.pos_drop(x)
+        # x = self.pos_drop(x)
 
-        # apply Transformer blocks
+        # # apply Transformer blocks
 
-        for blk in self.blocks:
-            x = x + self.task_embedding[:,task_rank:task_rank+1, :]
-            x = blk(x)
+        # for blk in self.blocks:
+        #     x = x + self.task_embedding[:,task_rank:task_rank+1, :]
+        #     x = blk(x)
 
-        if 'class' in task:
-            x = x[:, 1:, :].mean(dim=1)
-            x = self.fc_norm(x)
-        else:
-            x = self.norm(x)
-            x = x[:, 1:, :]
+        # if 'class' in task:
+        #     x = x[:, 1:, :].mean(dim=1)
+        #     x = self.fc_norm(x)
+        # else:
+        #     x = self.norm(x)
+        #     x = x[:, 1:, :]
 
         return x, 0
 
@@ -97,7 +98,7 @@ class MTVisionTransformer(VisionTransformer):
             if the_type == task:
                 task_rank = t
                 break
-        assert task_rank > -1
+        assert task_rank > -1, f'错误: 没有找到task {task} 对应的任务编号.'
 
         x, z_loss = self.forward_features(x, task_rank, task)
         x = self.task_heads[task_rank](x)
@@ -114,63 +115,103 @@ def move_dict(ckpt, src, tgt):
         del ckpt[src]
 
 # A gating for a task
-class MTVisionTransformerMoETaskGating(MTVisionTransformer):
-    def __init__(self, img_types, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4., qkv_bias=True, 
+class MTMobileViTMoETaskGating(MTMobileViT):
+    def __init__(self, img_types, num_heads=12, mlp_ratio=4., qkv_bias=True, # depth = 12,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0., norm_layer=None, 
                  num_attn_experts=48, head_dim=None, att_w_topk_loss=0.0, att_limit_k=0, 
-                 num_ffd_experts=16, ffd_heads=2, ffd_noise=True,
-                 moe_type='normal',
+                 num_ffd_experts=16, ffd_heads=2, ffd_noise=True, moe_type='normal', 
                  switchloss=0.01 * 1, zloss=0.001 * 1, w_topk_loss= 0.0, limit_k=0, 
-                 w_MI = 0.,
-                 noisy_gating=True,
-                 post_layer_norm=False,
-                 twice_mlp=False,
-                 twice_attn=False,
-                 **kwargs):
-        super(MTVisionTransformerMoETaskGating, self).__init__(img_types,
-            embed_dim=embed_dim, depth=depth, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,  
-            drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=drop_path_rate, norm_layer=norm_layer, 
-            **kwargs)
+                 w_MI = 0., noisy_gating=True, post_layer_norm=False, **kwargs):
+        # w_topk_loss：表示Top-K损失的权重，用于在训练过程中对专家选择进行正则化。
+        # 作用：通过增加一个额外的损失项，鼓励模型在选择专家时更均衡地使用不同的专家，防止某些专家被过度使用或闲置。
+        # taskGating：表示是否启用任务门控机制。
+        # 作用：任务门控机制允许模型根据任务动态选择合适的专家，从而提高多任务学习的效果。
+        # ismoe：表示模型是否为MoE（混合专家）模型。
+        # 作用：这个布尔值指示模型在前向传播时是否使用混合专家机制。
+        # task_num：表示任务的数量。
+        # 作用：用于确定有多少个不同的任务，每个任务可能有不同的头部和特征处理方式。
+        # self.R：包含模型超参数的字典。
+        # 作用：用于存储和传递一组关键的超参数，便于在模型的各个部分中引用和使用。
+        # self.R 字典中的具体超参数
+        # depth：Transformer块的数量。
+        # 作用：控制模型的深度，影响模型的容量和特征提取的层次性。
+        # task_num：任务的数量。
+        # 作用：用于确定有多少个不同的任务。
+        # head_dim：每个注意力头的维度。
+        # 作用：影响多头注意力机制中每个头处理的特征维度。
+        # noisy_gating：是否启用噪声门控。
+        # 作用：通过在门控网络中加入噪声，提高专家选择的多样性和鲁棒性。
+        # ffd_heads 和 ffd_noise：前馈网络中的头数和噪声。
+        # 作用：控制前馈网络的结构和正则化，类似于多头注意力机制。
+        # dim：嵌入维度。
+        # 作用：表示输入特征的维度，影响模型的表示能力和计算复杂度。
+        # num_heads：多头注意力机制中的头数。
+        # 作用：通过增加注意力头数，提高模型捕捉不同特征的能力。
+        # mlp_ratio：多层感知机（MLP）中隐藏层维度与输入维度的比率。
+        # 作用：控制MLP中隐藏层的大小，影响模型的容量和计算复杂度。
+        # qkv_bias：是否在Q、K、V线性层中使用偏置。
+        # 作用：影响注意力机制的计算，通常启用以提高模型的表现力。
+        # drop 和 attn_drop：Dropout的概率和注意力机制中的Dropout概率。
+        # 作用：通过随机丢弃一部分神经元，防止过拟合，提高模型的泛化能力。
+        # drop_path_rate：DropPath的概率。
+        # 作用：增加残差路径上的随机性，进一步正则化模型。
+        # norm_layer：归一化层的类型。
+        # 作用：控制在模型中使用哪种归一化层，如LayerNorm或BatchNorm。
+        # moe_type: MoE机制的类型。
+        # 作用：指定使用哪种类型的混合专家机制，可能有不同的实现方式。
+        # switchloss 和 zloss：用于MoE机制的正则化损失。
+        # 作用：帮助均衡专家的使用频率，防止某些专家过度使用。
+        # limit_k：选择的专家数量限制。
+        # 作用：限制每次选择的专家数量，控制计算复杂度。
+        # post_layer_norm：是否在每个层之后进行归一化。
+        # 作用：提高训练的稳定性和模型的表现力。
+        super(MTMobileViTMoETaskGating, self).__init__(
+            img_types, num_heads=num_heads, mlp_ratio=mlp_ratio, # depth=depth, 
+            qkv_bias=qkv_bias, drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, 
+            drop_path_rate=drop_path_rate, norm_layer=norm_layer, **kwargs)
 
         self.moe_type = moe_type
-        self.depth = depth
+        # self.depth = depth
 
         self.w_topk_loss = w_topk_loss
         self.taskGating = True
         self.ismoe = True
         self.task_num = len(self.img_types)
         self.R = {
-                'depth': depth,
-                'task_num': self.task_num,
-                'head_dim': head_dim,
-                'noisy_gating': noisy_gating,
-                'ffd_heads': ffd_heads, 'ffd_noise': ffd_noise,
-                'dim': embed_dim, 'num_heads': num_heads, 'mlp_ratio': mlp_ratio, 'qkv_bias': qkv_bias,
-                'drop': drop_rate, 'attn_drop': attn_drop_rate, 'drop_path_rate': drop_path_rate, 'norm_layer': norm_layer,
-                'moe_type': moe_type, 'switchloss': switchloss, 'zloss': zloss, 'w_topk_loss': w_topk_loss, 'limit_k': limit_k,
-                'post_layer_norm': post_layer_norm,
-                'twice_mlp': twice_mlp,
-                'twice_attn': twice_attn,
+                'task_num': self.task_num, 'head_dim': head_dim, 'noisy_gating': noisy_gating,
+                'ffd_heads': ffd_heads, 'ffd_noise': ffd_noise, 'num_heads': num_heads, 
+                'mlp_ratio': mlp_ratio, 'qkv_bias': qkv_bias, 'drop': drop_rate, 
+                'attn_drop': attn_drop_rate, 'drop_path_rate': drop_path_rate, 
+                'norm_layer': norm_layer, 'moe_type': moe_type, 'switchloss': switchloss, 
+                'zloss': zloss, 'w_topk_loss': w_topk_loss, 'limit_k': limit_k,
+                'post_layer_norm': post_layer_norm, # 'depth': depth
                 }
 
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
-        self.twice_mlp = twice_mlp
+        if self.is_moe:
+            moe_target = {'BottleneckBlock'}
+            
+            for stage_idx in range(len(self.stages)):
+                stage = self.stages[stage_idx]
+                for expert_base_idx in range(len(stage)):
+                    expert_base = stage[expert_base_idx]
+                    experts = moelize(expert_base)
+                
+
+
+
+        # dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
+        # self.twice_mlp = twice_mlp
 
         self.blocks = nn.Sequential(*[
             MoEnhanceTaskBlock(
                 task_num=self.task_num,
                 num_attn_experts=num_attn_experts, head_dim=head_dim,
                 num_ffd_experts=num_ffd_experts, ffd_heads=ffd_heads, ffd_noise=ffd_noise,
-                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
+                num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                drop=drop_rate, attn_drop=attn_drop_rate, norm_layer=norm_layer,
                 moe_type=moe_type,switchloss=switchloss, zloss=zloss, w_topk_loss=w_topk_loss, limit_k=limit_k, 
-                w_MI = w_MI,
-                noisy_gating=noisy_gating,
-                att_w_topk_loss=att_w_topk_loss, att_limit_k=att_limit_k, 
-                post_layer_norm=post_layer_norm,
-                use_moe_mlp=(twice_mlp==False or (i%2)==1),
-                use_moe_attn=(twice_attn==False or (i%2)==0),
-                )
+                w_MI = w_MI, noisy_gating=noisy_gating, att_w_topk_loss=att_w_topk_loss,
+                att_limit_k=att_limit_k, post_layer_norm=post_layer_norm,)
             for i in range(depth)])
 
         self.apply(self._init_weights)
@@ -538,138 +579,128 @@ class MTVisionTransformerMoETaskGating(MTVisionTransformer):
         return output, z_loss + self.get_zloss()
 
 
-class MTVisionTransformerM3ViT(MTVisionTransformerMoETaskGating):
-    def __init__(self, img_types,
-                 **kwargs):
-        super(MTVisionTransformerM3ViT, self).__init__(img_types,**kwargs)
+# class MTVisionTransformerM3ViT(MTMobileViTMoETaskGating):
+#     def __init__(self, img_types,
+#                  **kwargs):
+#         super(MTVisionTransformerM3ViT, self).__init__(img_types,**kwargs)
 
-    def forward_features(self, x):
-        B = x.shape[0]
-        x = self.patch_embed(x)
+#     def forward_features(self, x):
+#         B = x.shape[0]
+#         x = self.patch_embed(x)
 
-        cls_tokens = self.cls_token.expand(B, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x = x + self.pos_embed
+#         cls_tokens = self.cls_token.expand(B, -1, -1)
+#         x = torch.cat((cls_tokens, x), dim=1)
+#         x = x + self.pos_embed
 
-        # x = x + self.task_embedding[:,task_rank:task_rank+1, :]
-        x_before = self.pos_drop(x)
+#         # x = x + self.task_embedding[:,task_rank:task_rank+1, :]
+#         x_before = self.pos_drop(x)
 
-        # apply Transformer blocks
+#         # apply Transformer blocks
 
-        output = {}
-        z_loss = 0
-        for t, the_type in enumerate(self.img_types):
-            x = x_before
-            for blk in self.blocks:
-                x = x + self.task_embedding[:, t:t+1, :]
-                x, _ = blk(x, t)
+#         output = {}
+#         z_loss = 0
+#         for t, the_type in enumerate(self.img_types):
+#             x = x_before
+#             for blk in self.blocks:
+#                 x = x + self.task_embedding[:, t:t+1, :]
+#                 x, _ = blk(x, t)
 
-            if 'class' in the_type:
-                x = x[:, 1:, :].mean(dim=1)
-                x = self.fc_norm(x)
-            else:
-                x = self.norm(x)
-                x = x[:, 1:, :]
-            output[the_type] = x
-            z_loss = z_loss + self.get_topkloss()
-            z_loss = z_loss + self.get_zloss()
+#             if 'class' in the_type:
+#                 x = x[:, 1:, :].mean(dim=1)
+#                 x = self.fc_norm(x)
+#             else:
+#                 x = self.norm(x)
+#                 x = x[:, 1:, :]
+#             output[the_type] = x
+#             z_loss = z_loss + self.get_topkloss()
+#             z_loss = z_loss + self.get_zloss()
         
-        return output, z_loss
+#         return output, z_loss
 
-    def forward(self, x, task, get_flop=False, get_z_loss=False):
+#     def forward(self, x, task, get_flop=False, get_z_loss=False):
 
-        output, z_loss = self.forward_features(x)
-        for t, the_type in enumerate(self.img_types):
-            output[the_type] = self.task_heads[t](output[the_type])
+#         output, z_loss = self.forward_features(x)
+#         for t, the_type in enumerate(self.img_types):
+#             output[the_type] = self.task_heads[t](output[the_type])
 
-        if get_flop:
-            return output['class_object']
+#         if get_flop:
+#             return output['class_object']
 
-        return output, z_loss
+#         return output, z_loss
 
 
-def mtvit_tiny(img_types, **kwargs): # 6.43M 
-    model = MTVisionTransformer(img_types,
+def mt_m_vit_tiny(img_types, **kwargs): # 6.43M 
+    model = MTMobileViT(img_types,
         patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
 
 
-def mtvit_small(img_types, **kwargs): # 23.48M 4.6G
-    model = MTVisionTransformer(img_types,
+def mt_m_vit_small(img_types, **kwargs): # 23.48M 4.6G
+    model = MTMobileViT(img_types,
         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_mlp16E4_small(img_types, **kwargs): # 67.37M 5.21G
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_mlp16E4_small(img_types, **kwargs): # 67.37M 5.21G
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         num_attn_experts=6, head_dim=384//6 * 2,
         num_ffd_experts=16, ffd_heads=4, ffd_noise=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_768_12E3_8E2_small(img_types, **kwargs): # 5.17Gs bsz18
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_768_12E3_8E2_small(img_types, **kwargs): # 5.17Gs bsz18
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=768, depth=12, num_heads=3, qkv_bias=True,
         num_attn_experts=12, head_dim=768//12 * 2,
         num_ffd_experts=8, ffd_heads=2, ffd_noise=True, mlp_ratio=1,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def m3vit_taskgate_mlp16E4_small(img_types, **kwargs): # 67.37M 5.21G
-    model = MTVisionTransformerM3ViT(img_types, 
-        patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
-        num_attn_experts=6, head_dim=384//6 * 2,
-        num_ffd_experts=16, ffd_heads=4, ffd_noise=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
+# def m3vit_taskgate_mlp16E4_small(img_types, **kwargs): # 67.37M 5.21G
+#     model = MTVisionTransformerM3ViT(img_types, 
+#         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+#         num_attn_experts=6, head_dim=384//6 * 2,
+#         num_ffd_experts=16, ffd_heads=4, ffd_noise=True,
+#         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+#     return model
 
-def mtvit_topk_taskgate_mlp16E4_small(img_types, **kwargs): # 67.37M 5.21G
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_topk_taskgate_mlp16E4_small(img_types, **kwargs): # 67.37M 5.21G
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         num_attn_experts=6, head_dim=384//6 * 2, w_topk_loss=0.1, limit_k=4, 
         num_ffd_experts=16, ffd_heads=4, ffd_noise=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_topk_l6_taskgate_mlp16E4_small(img_types, **kwargs): # 67.37M 5.21G
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_topk_l6_taskgate_mlp16E4_small(img_types, **kwargs): # 67.37M 5.21G
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         num_attn_experts=6, head_dim=384//6 * 2, w_topk_loss=0.1, limit_k=6, 
         num_ffd_experts=16, ffd_heads=4, ffd_noise=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_topk_taskgate_small_att(img_types, **kwargs): # 67.37M 5.21G
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_topk_taskgate_small_att(img_types, **kwargs): # 67.37M 5.21G
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         num_attn_experts=6 + 3 * 2, head_dim=384//6 * 2, att_w_topk_loss=0.1, att_limit_k=6, 
         num_ffd_experts=2, ffd_heads=2, ffd_noise=True, w_topk_loss=0.0, limit_k=0, 
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_small_att(img_types, **kwargs): # 68.46M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_att(img_types, **kwargs): # 68.46M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=6 + 9, head_dim=384//6 * 2,
         num_ffd_experts=1, ffd_heads=1, ffd_noise=False, mlp_ratio=4,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_small_att_MI(img_types, **kwargs): # 68.46M
-    model = MTVisionTransformerMoETaskGating(img_types, 
-        patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
-        num_attn_experts=6 + 9, head_dim=384//6 * 2,
-        num_ffd_experts=1, ffd_heads=1, ffd_noise=False, mlp_ratio=4,
-        w_MI=0.0005, switchloss=0.0, zloss=0.0,
-        noisy_gating=False,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
-
-def mtvit_taskgate_small_att_MI_prob(img_types, **kwargs): # 68.46M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_att_MI(img_types, **kwargs): # 68.46M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=6 + 9, head_dim=384//6 * 2,
         num_ffd_experts=1, ffd_heads=1, ffd_noise=False, mlp_ratio=4,
@@ -678,8 +709,8 @@ def mtvit_taskgate_small_att_MI_prob(img_types, **kwargs): # 68.46M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_small_att_MI_2(img_types, **kwargs): # 68.46M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_att_MI_prob(img_types, **kwargs): # 68.46M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=6 + 9, head_dim=384//6 * 2,
         num_ffd_experts=1, ffd_heads=1, ffd_noise=False, mlp_ratio=4,
@@ -688,8 +719,18 @@ def mtvit_taskgate_small_att_MI_2(img_types, **kwargs): # 68.46M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_mlp16E4_small_MI(img_types, **kwargs): # 68.46M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_att_MI_2(img_types, **kwargs): # 68.46M
+    model = MTMobileViTMoETaskGating(img_types, 
+        patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
+        num_attn_experts=6 + 9, head_dim=384//6 * 2,
+        num_ffd_experts=1, ffd_heads=1, ffd_noise=False, mlp_ratio=4,
+        w_MI=0.0005, switchloss=0.0, zloss=0.0,
+        noisy_gating=False,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    return model
+
+def mt_m_vit_taskgate_mlp16E4_small_MI(img_types, **kwargs): # 68.46M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=6, head_dim=384//6 * 2,
         num_ffd_experts=16, ffd_heads=4, ffd_noise=False, mlp_ratio=4,
@@ -698,8 +739,8 @@ def mtvit_taskgate_mlp16E4_small_MI(img_types, **kwargs): # 68.46M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_att_mlp_small_MI(img_types, **kwargs): # 33.25M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_att_mlp_small_MI(img_types, **kwargs): # 33.25M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=12, head_dim=384//6 * 2,
         num_ffd_experts=16, ffd_heads=4, ffd_noise=False, mlp_ratio=1,
@@ -709,8 +750,8 @@ def mtvit_taskgate_att_mlp_small_MI(img_types, **kwargs): # 33.25M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_att_mlp_small_MI_twice(img_types, **kwargs): # 34.17M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_att_mlp_small_MI_twice(img_types, **kwargs): # 34.17M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=15, head_dim=384//6 * 2,
         num_ffd_experts=16, ffd_heads=4, ffd_noise=False, mlp_ratio=4,
@@ -721,8 +762,8 @@ def mtvit_taskgate_att_mlp_small_MI_twice(img_types, **kwargs): # 34.17M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_mlp_small_MI(img_types, **kwargs): # 68.46M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_mlp_small_MI(img_types, **kwargs): # 68.46M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=6, head_dim=384//6 * 2,
         num_ffd_experts=16, ffd_heads=4, ffd_noise=False, mlp_ratio=1,
@@ -732,8 +773,8 @@ def mtvit_taskgate_mlp_small_MI(img_types, **kwargs): # 68.46M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_mlp_small_4_MI(img_types, **kwargs): # 32.64M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_mlp_small_4_MI(img_types, **kwargs): # 32.64M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=6, head_dim=384//6 * 2,
         num_ffd_experts=8, ffd_heads=4, ffd_noise=False, mlp_ratio=4,
@@ -743,8 +784,8 @@ def mtvit_taskgate_mlp_small_4_MI(img_types, **kwargs): # 32.64M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_small_att_mlp(img_types, **kwargs): # 
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_att_mlp(img_types, **kwargs): # 
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=6 + 9, head_dim=384//6 * 2,
         num_ffd_experts=16, ffd_heads=4, ffd_noise=True, mlp_ratio=4,
@@ -753,8 +794,8 @@ def mtvit_taskgate_small_att_mlp(img_types, **kwargs): #
 
 # (128 * 15 + 384 * 16) * 12 * 13 = 1.25M
 
-def mtvit_taskgate_small_att_mlp_MI(img_types, **kwargs): # 68.46M
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_att_mlp_MI(img_types, **kwargs): # 68.46M
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, qkv_bias=True,
         num_attn_experts=6 + 6, head_dim=384//6 * 2,
         num_ffd_experts=8, ffd_heads=4, ffd_noise=False, mlp_ratio=4,
@@ -762,16 +803,16 @@ def mtvit_taskgate_small_att_mlp_MI(img_types, **kwargs): # 68.46M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_small_task0(img_types, **kwargs): # 60.17M 
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_task0(img_types, **kwargs): # 60.17M 
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         num_attn_experts=6, head_dim=384//6 * 2,
         num_ffd_experts=4, ffd_heads=4, ffd_noise=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_small_task0_MI(img_types, **kwargs): # 60.17M 
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_task0_MI(img_types, **kwargs): # 60.17M 
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         num_attn_experts=6, head_dim=384//6 * 2,
         num_ffd_experts=4, ffd_heads=4, ffd_noise=True,
@@ -779,8 +820,8 @@ def mtvit_taskgate_small_task0_MI(img_types, **kwargs): # 60.17M
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_taskgate_small_task2(img_types, **kwargs): # 60.17M 
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_small_task2(img_types, **kwargs): # 60.17M 
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
         num_attn_experts=6 + 3 * 2, head_dim=384//6 * 2,
         num_ffd_experts=2 + 2 * 2, ffd_heads=2, ffd_noise=True,
@@ -788,22 +829,22 @@ def mtvit_taskgate_small_task2(img_types, **kwargs): # 60.17M
     return model
 
 
-def mtvit_moa_small(img_types, **kwargs):
-    model = VisionTransformerMoA(
-        patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
-        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
+# def mt_m_vit_moa_small(img_types, **kwargs):
+#     model = VisionTransformerMoA(
+#         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
+#         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+#     return model
 
-def mtvit_moe_small(img_types, **kwargs):
-    model = VisionTransformerMoE(
-        patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
-        num_attn_experts=6*8, head_dim=384//6 * 2,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    return model
+# def mt_m_vit_moe_small(img_types, **kwargs):
+#     model = VisionTransformerMoE(
+#         patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+#         num_attn_experts=6*8, head_dim=384//6 * 2,
+#         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+#     return model
 
 
-def mtvit_taskgate_att_mlp_base_MI_twice(img_types, **kwargs): # number of params (M): 195.80
-    model = MTVisionTransformerMoETaskGating(img_types, 
+def mt_m_vit_taskgate_att_mlp_base_MI_twice(img_types, **kwargs): # number of params (M): 195.80
+    model = MTMobileViTMoETaskGating(img_types, 
         patch_size=16, embed_dim=768, depth=12, num_heads=12, qkv_bias=True,
         num_attn_experts=24, head_dim=768//12 * 2,
         num_ffd_experts=16, ffd_heads=4, ffd_noise=False, mlp_ratio=4,
@@ -815,27 +856,27 @@ def mtvit_taskgate_att_mlp_base_MI_twice(img_types, **kwargs): # number of param
     return model
 
 
-def mtvit_base_patch16(img_types, **kwargs):
-    model = MTVisionTransformer(img_types,
+def mt_m_vit_base_patch16(img_types, **kwargs):
+    model = MTMobileViT(img_types,
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_base(img_types, **kwargs): # 89.42M 17.58G
-    model = MTVisionTransformer(img_types,
+def mt_m_vit_base(img_types, **kwargs): # 89.42M 17.58G
+    model = MTMobileViT(img_types,
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
-def mtvit_large_patch16(img_types, **kwargs):
-    model = MTVisionTransformer(img_types,
+def mt_m_vit_large_patch16(img_types, **kwargs):
+    model = MTMobileViT(img_types,
         patch_size=16, embed_dim=1024, depth=24, num_heads=16, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
 
-def mtvit_huge_patch14(img_types, **kwargs):
-    model = MTVisionTransformer(img_types,
+def mt_m_vit_huge_patch14(img_types, **kwargs):
+    model = MTMobileViT(img_types,
         patch_size=14, embed_dim=1280, depth=32, num_heads=16, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
@@ -847,5 +888,5 @@ def mtvit_huge_patch14(img_types, **kwargs):
 if __name__ == '__main__':
     img_types = ['rgb', 'class_object', 'class_scene', 'depth_euclidean', 'normal', 'segment_semantic']
     norm_layer=torch.nn.Identity
-    model = MTVisionTransformer(img_types=img_types, norm_layer=norm_layer)
+    model = MTMobileViT(img_types=img_types, norm_layer=norm_layer)
     print(model)
