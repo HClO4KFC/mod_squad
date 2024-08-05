@@ -2,3 +2,4 @@ pascalVOC
 .vscode/
 __pycache__/
 omnidata/
+logs_dirs/
