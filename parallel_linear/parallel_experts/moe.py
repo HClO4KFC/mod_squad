@@ -345,7 +345,7 @@ class TaskMoE(MoE):
     """Call a Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
     Args:
     input_size: integer - size of the input
-    output_size: integer - size of the input
+    output_size: integer - size of the output
     num_experts: an integer - number of experts
     hidden_size: an integer - hidden size of the experts
     noisy_gating: a boolean

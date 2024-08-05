@@ -288,16 +288,15 @@ def main(args):
         drop_last=True
     )
 
-    # model = models_mt.__dict__[args.model](
-    model = models_mt_mbvit.__dict__[args.model](
+    # model = models_mt_mbvit.__dict__[args.model](
+    model = models_mt.__dict__[args.model](
         args.img_types,
         num_classes=args.nb_classes,
-        drop_path_rate=args.drop_path,
-        global_pool=args.global_pool,
         mbvit_version = args.mbvit_version,
         pretrained = args.pretrained
     )
 
+    
     if args.finetune and not args.eval:
         checkpoint = torch.load(args.finetune, map_location='cpu')
 
