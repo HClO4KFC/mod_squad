@@ -35,7 +35,7 @@ class MTVisionTransformer(VisionTransformer):
 
         # create task head
         self.task_heads = []
-        type_to_channel = {'depth_euclidean':1, 'depth_zbuffer':1, 'edge_occlusion':1, 'edge_texture':1, 'keypoints2d':1, 'keypoints3d':1, 'normal':3, 'principal_curvature':2,  'reshading':3, 'rgb':3, 'segment_semantic':18, 'segment_unsup2d':1, 'segment_unsup25d':1}
+        type_to_channel = {'depth_euclidean':1, 'depth_zbuffer':1, 'edge_occlusion':1, 'edge_texture':1, 'keypoints2d':1, 'keypoints3d':1, 'normal':3, 'principal_curvature':2,  'reshading':3, 'rgb':3, 'segment_semantic':1, 'segment_unsup2d':1, 'segment_unsup25d':1}
         image_height, image_width = self.patch_embed.img_size
         patch_height, patch_width = self.patch_embed.patch_size
         assert image_height == 224 and image_width == 224

@@ -13,10 +13,12 @@ import torch.nn.functional as F
 from util.metric import *
 
 def get_loss(outputs, targets, task):
+    criterion = torch.nn.CrossEntropyLoss()
     if 'class' in task:
         task_loss = F.mse_loss(outputs, targets.squeeze(1))
     elif 'segment_semantic' in task:
-        task_loss = criterion(outputs, targets)
+        # task_loss = criterion(outputs.squeeze(-1), targets)
+        task_loss = F.cross_entropy(outputs.squeeze(-1), targets)
     elif 'normal' in task:
         T = targets.permute(0,2,3,1)
         task_loss = (1 - (outputs*T).sum(-1) / (torch.norm(outputs, p=2, dim=-1) + 0.000001) / (torch.norm(T, p=2, dim=-1)+ 0.000001) ).mean()

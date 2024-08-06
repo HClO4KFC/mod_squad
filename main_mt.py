@@ -292,8 +292,8 @@ def main(args):
     model = models_mt.__dict__[args.model](
         args.img_types,
         num_classes=args.nb_classes,
-        mbvit_version = args.mbvit_version,
-        pretrained = args.pretrained
+        # mbvit_version = args.mbvit_version,
+        # pretrained = args.pretrained
     )
 
     
