@@ -112,6 +112,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                 for task in args.img_types:
                     if 'rgb' in task:
                         continue
+                    # if task == 'segment_semantic':
+                    #     output = outputs[task].detach().cpu()
+                        
                     predict[task] = outputs[task].detach().cpu()
                     targets = data[task].to(device, non_blocking=True)
                     task_loss = get_loss(outputs[task], targets, task)

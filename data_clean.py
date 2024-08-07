@@ -10,7 +10,8 @@ root_dir = '/home/yhy/code/ckf/taskonomy'
 #     ], 'val': ['wiconisco', 'corozal', 'collierville', 'markleeville', 'darden']
 #     , 'test': ['ihlen', 'muleshoe', 'uvalda', 'noxapater', 'mcdade'] }
 scenes_dict = {'train':['pomaria']}
-tasks = ['rgb', 'class_object', 'class_scene', 'depth_euclidean', 'fragments', 'normal', 'segment_semantic']
+# tasks = ['rgb', 'class_object', 'class_scene', 'depth_euclidean', 'fragments', 'normal', 'segment_semantic']
+tasks = ['rgb', 'segment_semantic', 'depth_euclidean', 'normal', '', 'fragments']
 
 if __name__ == '__main__':
     for part, scenes in scenes_dict.items():

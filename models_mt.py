@@ -6,6 +6,7 @@ from einops.layers.torch import Rearrange
 import os 
 import numpy as np
 
+from heads.seg_head import create_seg_decoder
 from models_moe import PatchEmbed, MoEnhanceBlock, MoEnhanceTaskBlock
 
 from timm.models.vision_transformer import VisionTransformer
@@ -50,6 +51,22 @@ class MTVisionTransformer(VisionTransformer):
                             nn.Linear(embed_dim, class_num)
                         )
                     )
+            # elif img_type == 'segment_semantic':
+            #     d_model = 384
+            #     patch_size = 16
+            #     decoder_cfg = {
+            #         'drop_path_rate': 0.0, 
+            #         'dropout': 0.1, 
+            #         'n_cls': 17, 
+            #         'n_layers': 2, 
+            #         'name': 'mask_transformer'
+            #     }
+            #     seg_head = create_seg_decoder(d_model, patch_size, decoder_cfg)
+            #     self.task_heads.append(
+            #         nn.Sequential(
+            #             seg_head
+            #         )
+            #     )
             else:
                 channel = type_to_channel[img_type]
                 self.task_heads.append(
@@ -526,11 +543,11 @@ class MTVisionTransformerMoETaskGating(MTVisionTransformer):
         return output, z_loss
 
     def forward(self, x, task, get_flop=False, get_z_loss=False):
-
+        # im_size = list(x.shape[-2:])
+        im_size = 224
         output, z_loss = self.forward_features(x)
         for t, the_type in enumerate(self.img_types):
             output[the_type] = self.task_heads[t](output[the_type])
-
         if get_flop:
             return output['class_object']
 

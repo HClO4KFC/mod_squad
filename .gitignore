@@ -3,3 +3,4 @@ pascalVOC
 __pycache__/
 omnidata/
 logs_dirs/
+work_dirs/

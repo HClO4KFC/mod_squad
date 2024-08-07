@@ -1,0 +1,71 @@
+Segmenter(
+  (encoder): VisionTransformer(
+    (patch_embed): PatchEmbedding(
+      (proj): Conv2d(3, 192, kernel_size=(16, 16), stride=(16, 16))
+    )
+    (dropout): Dropout(p=0.0, inplace=False)
+    (blocks): ModuleList(
+      (0): Block(
+        (norm1): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+        (norm2): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+        (attn): Attention(
+          (qkv): Linear(in_features=192, out_features=576, bias=True)
+          (attn_drop): Dropout(p=0.0, inplace=False)
+          (proj): Linear(in_features=192, out_features=192, bias=True)
+          (proj_drop): Dropout(p=0.0, inplace=False)
+        )
+        (mlp): FeedForward(
+          (fc1): Linear(in_features=192, out_features=768, bias=True)
+          (act): GELU(approximate='none')
+          (fc2): Linear(in_features=768, out_features=192, bias=True)
+          (drop): Dropout(p=0.0, inplace=False)
+        )
+        (drop_path): Identity()
+      )
+      (1-11): 11 x Block(
+        (norm1): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+        (norm2): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+        (attn): Attention(
+          (qkv): Linear(in_features=192, out_features=576, bias=True)
+          (attn_drop): Dropout(p=0.0, inplace=False)
+          (proj): Linear(in_features=192, out_features=192, bias=True)
+          (proj_drop): Dropout(p=0.0, inplace=False)
+        )
+        (mlp): FeedForward(
+          (fc1): Linear(in_features=192, out_features=768, bias=True)
+          (act): GELU(approximate='none')
+          (fc2): Linear(in_features=768, out_features=192, bias=True)
+          (drop): Dropout(p=0.0, inplace=False)
+        )
+        (drop_path): DropPath()
+      )
+    )
+    (norm): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+    (head): Linear(in_features=192, out_features=1000, bias=True)
+    (pre_logits): Identity()
+  )
+  (decoder): MaskTransformer(
+    (blocks): ModuleList(
+      (0-1): 2 x Block(
+        (norm1): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+        (norm2): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+        (attn): Attention(
+          (qkv): Linear(in_features=192, out_features=576, bias=True)
+          (attn_drop): Dropout(p=0.1, inplace=False)
+          (proj): Linear(in_features=192, out_features=192, bias=True)
+          (proj_drop): Dropout(p=0.1, inplace=False)
+        )
+        (mlp): FeedForward(
+          (fc1): Linear(in_features=192, out_features=768, bias=True)
+          (act): GELU(approximate='none')
+          (fc2): Linear(in_features=768, out_features=192, bias=True)
+          (drop): Dropout(p=0.1, inplace=False)
+        )
+        (drop_path): Identity()
+      )
+    )
+    (proj_dec): Linear(in_features=192, out_features=192, bias=True)
+    (decoder_norm): LayerNorm((192,), eps=1e-05, elementwise_affine=True)
+    (mask_norm): LayerNorm((150,), eps=1e-05, elementwise_affine=True)
+  )
+)
